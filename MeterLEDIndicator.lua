@@ -96,8 +96,8 @@ ColorSchemeNames = {
   "Monochrome"
 }
 
--- Current active color scheme
-ActiveColorScheme = "Green-Yellow-Red"
+-- Current active color scheme (initialized from control at runtime)
+ActiveColorScheme = nil
 
 ---------------------------------------------------------------
 -- Helper Functions
@@ -289,7 +289,16 @@ function SetupColorSchemeSelector()
   if Controls.ColorScheme then
     -- Populate choices if this is a combo box
     Controls.ColorScheme.Choices = ColorSchemeNames
-    Controls.ColorScheme.String = ActiveColorScheme
+    
+    -- Read current value from control (Q-SYS persists last selection)
+    local current = Controls.ColorScheme.String
+    if ColorSchemes[current] then
+      ActiveColorScheme = current
+    else
+      -- Fallback if no valid selection exists yet
+      ActiveColorScheme = ColorSchemeNames[1]
+      Controls.ColorScheme.String = ActiveColorScheme
+    end
     
     Controls.ColorScheme.EventHandler = function(ctl)
       local selected = ctl.String
@@ -298,6 +307,9 @@ function SetupColorSchemeSelector()
         print("Color scheme changed to: " .. selected)
       end
     end
+  else
+    -- No control, use fallback
+    ActiveColorScheme = ColorSchemeNames[1]
   end
 end
 
