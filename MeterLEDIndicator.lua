@@ -22,6 +22,8 @@
 DBFS_MIN = -60           -- dBFS value that maps to minimum (0.0)
 DBFS_MAX = 0             -- dBFS value that maps to maximum (1.0)
 UPDATE_INTERVAL = 0.05   -- Timer interval in seconds (faster for smoother response)
+OPACITY_MIN = 0.05       -- Minimum LED opacity (at lowest level)
+OPACITY_MAX = 0.80       -- Maximum LED opacity (at highest level)
 
 ---------------------------------------------------------------
 -- Color Scheme Definitions
@@ -230,11 +232,12 @@ function UpdateLED(meterCtl, ledCtl)
   
   local finalColor
   
+  -- Calculate opacity scaled between min and max
+  local opacity = Lerp(OPACITY_MIN, OPACITY_MAX, position)
+  
   if useGradient then
     -- Get color from gradient based on level
     local rgb = GetGradientColor(ActiveColorScheme, position)
-    -- Apply opacity based on level - fades in as level increases (max 80%)
-    local opacity = position * 0.8  -- Opacity scales from 0.0 to 0.8
     finalColor = BuildColorWithOpacity(rgb, opacity)
   else
     -- Manual color mode with opacity based on level
@@ -245,7 +248,7 @@ function UpdateLED(meterCtl, ledCtl)
     
     if IsValidHexColor(manualColor) then
       local rgb = HexToRGB(manualColor)
-      finalColor = BuildColorWithOpacity(rgb, position)
+      finalColor = BuildColorWithOpacity(rgb, opacity)
     else
       -- Fallback: use position for LED position/value
       ledCtl.Position = position
