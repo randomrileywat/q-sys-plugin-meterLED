@@ -24,6 +24,13 @@ DBFS_MAX = 0             -- dBFS value that maps to maximum (1.0)
 UPDATE_INTERVAL = 0.05   -- Timer interval in seconds (faster for smoother response)
 OPACITY_MIN = 0.05       -- Minimum LED opacity (at lowest level)
 OPACITY_MAX = 0.80       -- Maximum LED opacity (at highest level)
+GC_INTERVAL = 60         -- Seconds between forced garbage collection cycles
+
+---------------------------------------------------------------
+-- Reusable Buffers (avoid table allocation in hot loops)
+---------------------------------------------------------------
+_colorBuffer = {0, 0, 0} -- Reusable RGB buffer for gradient calculations
+_lastColors = {}          -- Cache of last color string per LED index (skip unchanged writes)
 
 ---------------------------------------------------------------
 -- Color Scheme Definitions
@@ -140,13 +147,13 @@ function Lerp(a, b, t)
   return a + (b - a) * t
 end
 
--- Interpolate between two RGB color tables
+-- Interpolate between two RGB color tables INTO the reusable buffer
+-- Returns the shared _colorBuffer (do NOT store a reference; use values immediately)
 function LerpColor(color1, color2, t)
-  return {
-    Lerp(color1[1], color2[1], t),
-    Lerp(color1[2], color2[2], t),
-    Lerp(color1[3], color2[3], t)
-  }
+  _colorBuffer[1] = Lerp(color1[1], color2[1], t)
+  _colorBuffer[2] = Lerp(color1[2], color2[2], t)
+  _colorBuffer[3] = Lerp(color1[3], color2[3], t)
+  return _colorBuffer
 end
 
 -- Get interpolated color from a color scheme based on position (0.0 to 1.0)
@@ -218,7 +225,7 @@ function HexToRGB(hexColor)
 end
 
 -- Update a single LED based on meter value and settings
-function UpdateLED(meterCtl, ledCtl)
+function UpdateLED(meterCtl, ledCtl, index)
   if not meterCtl or not ledCtl then return end
   
   local meterValue = meterCtl.Value
@@ -236,7 +243,7 @@ function UpdateLED(meterCtl, ledCtl)
   local opacity = Lerp(OPACITY_MIN, OPACITY_MAX, position)
   
   if useGradient then
-    -- Get color from gradient based on level
+    -- Get color from gradient based on level (uses shared buffer)
     local rgb = GetGradientColor(ActiveColorScheme, position)
     finalColor = BuildColorWithOpacity(rgb, opacity)
   else
@@ -256,29 +263,50 @@ function UpdateLED(meterCtl, ledCtl)
     end
   end
   
-  ledCtl.Color = finalColor
+  -- Only write to the control if the color has changed (reduces overhead)
+  if _lastColors[index] ~= finalColor then
+    _lastColors[index] = finalColor
+    ledCtl.Color = finalColor
+  end
 end
 
 ---------------------------------------------------------------
 -- Runtime Code
 ---------------------------------------------------------------
 
+-- Stop any existing timer from a previous script run to prevent duplicates
+if UpdateTimer then
+  UpdateTimer:Stop()
+  UpdateTimer = nil
+end
+if GCTimer then
+  GCTimer:Stop()
+  GCTimer = nil
+end
+
 -- Normalize controls to arrays (handles both single and multiple controls)
 LED_Controls = NormalizeControlArray(Controls.LED_Indicator)
 Meter_Controls = NormalizeControlArray(Controls.dBFS_Input)
 
+-- Main update timer
 UpdateTimer = Timer.New()
-UpdateTimer:Start(UPDATE_INTERVAL)
-
 UpdateTimer.EventHandler = function()
   -- Update all LED channels dynamically using ipairs
   for i, ledCtl in ipairs(LED_Controls) do
     local meterCtl = Meter_Controls[i]
     if meterCtl and ledCtl then
-      UpdateLED(meterCtl, ledCtl)
+      UpdateLED(meterCtl, ledCtl, i)
     end
   end
 end
+UpdateTimer:Start(UPDATE_INTERVAL)
+
+-- Periodic garbage collection timer to prevent memory buildup
+GCTimer = Timer.New()
+GCTimer.EventHandler = function()
+  collectgarbage("collect")
+end
+GCTimer:Start(GC_INTERVAL)
 
 ---------------------------------------------------------------
 -- Event Handlers
