@@ -229,6 +229,12 @@ function UpdateLED(meterCtl, ledCtl, index)
   if not meterCtl or not ledCtl then return end
   
   local meterValue = meterCtl.Value
+  
+  -- Apply boost offset from control
+  if Controls.Boost then
+    meterValue = meterValue + Controls.Boost.Value
+  end
+  
   local position = dBFSToPosition(meterValue)
   
   -- Check if we're using gradient mode or manual color
