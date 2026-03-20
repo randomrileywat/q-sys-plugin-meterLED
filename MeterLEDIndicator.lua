@@ -230,12 +230,13 @@ function UpdateLED(meterCtl, ledCtl, index)
   
   local meterValue = meterCtl.Value
   
-  -- Apply boost offset from control
-  if Controls.Boost then
-    meterValue = meterValue + Controls.Boost.Value
-  end
-  
+  -- Apply boost as a multiplier to the normalized position
+  -- Boost of 1 = no change, >1 = more sensitive, <1 = less sensitive
+  -- Meter value of 0 (DBFS_MIN) stays at 0 regardless of boost
   local position = dBFSToPosition(meterValue)
+  if Controls.Boost and Controls.Boost.Value ~= 0 then
+    position = Clamp(position * Controls.Boost.Value, 0, 1)
+  end
   
   -- Check if we're using gradient mode or manual color
   local useGradient = true
